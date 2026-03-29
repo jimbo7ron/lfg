@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+# lfg -- Let's F***ing Go
+# Custom dotfile & machine setup tool
+set -euo pipefail
+
+# Resolve script directory (works with symlinks)
+LFG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export LFG_DIR
+
+# Source helpers
+source "$LFG_DIR/lib/helpers.sh"
+
+# ── Globals ──────────────────────────────────────────────────────────────────
+
+DRY_RUN="false"
+NO_BACKUP="false"
+PUSH="false"
+export DRY_RUN NO_BACKUP PUSH
+
+# ── Usage ────────────────────────────────────────────────────────────────────
+
+usage() {
+    cat <<EOF
+${BOLD}${CYAN}lfg${RESET} -- Let's F***ing Go
+
+${BOLD}Usage:${RESET}
+  ./lfg <command> [packages...] [options]
+
+${BOLD}Commands:${RESET}
+  ${GREEN}config${RESET} [pkgs...]    Deploy dotfile configs (all if none specified)
+  ${GREEN}install${RESET} [pkgs...]   Install system software via brew/apt
+  ${GREEN}save${RESET} [pkgs...]      Copy deployed dotfiles back into repo
+  ${GREEN}verify${RESET} [pkgs...]    Check for drift between deployed and repo
+  ${GREEN}update${RESET}              Pull remote changes and re-apply configs
+  ${GREEN}restore${RESET} <timestamp> Restore configs from backup
+  ${GREEN}add${RESET} <name>          Scaffold a new dotfile config package
+  ${GREEN}list${RESET}                Show available packages and status
+
+${BOLD}Options:${RESET}
+  --dry-run           Show what would change without applying
+  --no-backup         Skip backup step (config only)
+  --push              Commit and push after save
+  -h, --help          Show this help
+
+${BOLD}Examples:${RESET}
+  ./lfg config                Deploy all dotfile configs
+  ./lfg config zsh vim        Deploy only zsh and vim configs
+  ./lfg config --dry-run      Preview config changes
+  ./lfg install               Install all system software
+  ./lfg install ripgrep fzf   Install specific packages
+  ./lfg save zsh              Save local ~/.zshrc back into repo
+  ./lfg save --push           Save all and push to remote
+  ./lfg verify                Check all packages for drift
+  ./lfg update                Pull remote changes, re-apply
+  ./lfg list                  Show packages and status
+EOF
+}
+
+# ── Commands ─────────────────────────────────────────────────────────────────
+
+cmd_config() {
+    local packages=("$@")
+
+    detect_os
+    load_config
+
+    # Check for updates before installing
+    check_for_updates
+
+    if [[ "$DRY_RUN" != "true" ]]; then
+        init_backup
+    fi
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        # All packages
+        while IFS= read -r pkg; do
+            install_package "$pkg"
+        done < <(list_packages)
+    else
+        for pkg in "${packages[@]}"; do
+            install_package "$pkg"
+        done
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        printf "\n${BOLD}${YELLOW}Dry run — no changes made${RESET}\n"
+    else
+        printf "\n${BOLD}${GREEN}Config deployment complete${RESET}\n"
+    fi
+}
+
+cmd_install() {
+    local packages=("$@")
+    load_config
+    install_software "${packages[@]}"
+}
+
+cmd_save() {
+    local packages=("$@")
+
+    load_config
+
+    local any_changed=0
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        while IFS= read -r pkg; do
+            save_package "$pkg" || any_changed=1
+        done < <(list_packages)
+    else
+        for pkg in "${packages[@]}"; do
+            save_package "$pkg" || any_changed=1
+        done
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        printf "\n${BOLD}${YELLOW}Dry run — no changes made${RESET}\n"
+        return 0
+    fi
+
+    if [[ "$PUSH" == "true" && "$any_changed" -eq 1 ]]; then
+        log_header "Pushing changes"
+        cd "$LFG_DIR"
+        git add -A
+        git commit -m "lfg save: update dotfiles from $(hostname -s)"
+        git push
+        log_info "Pushed to remote"
+    fi
+}
+
+cmd_verify() {
+    local packages=("$@")
+
+    load_config
+
+    log_header "Verifying configs"
+
+    local any_drift=0
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        while IFS= read -r pkg; do
+            printf "\n${BOLD}%s${RESET}\n" "$pkg"
+            verify_package "$pkg" || any_drift=1
+        done < <(list_packages)
+    else
+        for pkg in "${packages[@]}"; do
+            printf "\n${BOLD}%s${RESET}\n" "$pkg"
+            verify_package "$pkg" || any_drift=1
+        done
+    fi
+
+    if [[ "$any_drift" -eq 0 ]]; then
+        printf "\n${BOLD}${GREEN}All configs up to date${RESET}\n"
+    else
+        printf "\n${BOLD}${YELLOW}Drift detected — run './lfg config' to re-apply or './lfg save' to capture changes${RESET}\n"
+    fi
+}
+
+cmd_update() {
+    load_config
+    do_update
+}
+
+cmd_restore() {
+    local timestamp="$1"
+    if [[ -z "$timestamp" ]]; then
+        log_error "Usage: ./lfg restore <timestamp>"
+        echo "Available backups:"
+        ls "$LFG_DIR/backups/" 2>/dev/null || echo "  (none)"
+        return 1
+    fi
+    restore_backup "$timestamp"
+}
+
+cmd_add() {
+    local name="$1"
+    if [[ -z "$name" ]]; then
+        log_error "Usage: ./lfg add <package-name>"
+        return 1
+    fi
+    add_package "$name"
+}
+
+cmd_list() {
+    load_config
+
+    log_header "Dotfile Packages"
+
+    while IFS= read -r pkg; do
+        local pkg_dir="$LFG_DIR/packages/$pkg"
+        local file_count
+        file_count=$(get_package_files "$pkg" | grep -c . 2>/dev/null || echo "0")
+        local tmpl_count
+        tmpl_count=$(find "$pkg_dir" -name "*.tmpl" -type f 2>/dev/null | wc -l | tr -d ' ')
+
+        printf "  ${BOLD}%-12s${RESET} %d file(s), %d template(s)\n" "$pkg" "$file_count" "$tmpl_count"
+    done < <(list_packages)
+
+    log_header "Software Manifests"
+    for f in "$LFG_DIR/software"/*.txt; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .txt)
+        local count
+        count=$(read_manifest "$f" | wc -l | tr -d ' ')
+        printf "  ${BOLD}%-12s${RESET} %d package(s)\n" "$name" "$count"
+    done
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+main() {
+    local command=""
+    local args=()
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run)  DRY_RUN="true"; shift ;;
+            --no-backup) NO_BACKUP="true"; shift ;;
+            --push)     PUSH="true"; shift ;;
+            -h|--help)  usage; exit 0 ;;
+            config|install|save|verify|update|restore|add|list)
+                if [[ -z "$command" ]]; then
+                    command="$1"
+                else
+                    args+=("$1")
+                fi
+                shift
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$command" ]]; then
+        usage
+        exit 0
+    fi
+
+    case "$command" in
+        config)  cmd_config "${args[@]}" ;;
+        install) cmd_install "${args[@]}" ;;
+        save)    cmd_save "${args[@]}" ;;
+        verify)  cmd_verify "${args[@]}" ;;
+        update)  cmd_update ;;
+        restore) cmd_restore "${args[0]:-}" ;;
+        add)     cmd_add "${args[0]:-}" ;;
+        list)    cmd_list ;;
+        *)       log_error "Unknown command: $command"; usage; exit 1 ;;
+    esac
+}
+
+main "$@"

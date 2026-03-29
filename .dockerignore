@@ -1,0 +1,4 @@
+backups/
+machine.conf
+.git/
+test/Dockerfile

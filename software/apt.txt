@@ -1,0 +1,9 @@
+# APT packages (Linux/Debian)
+vim
+tmux
+ripgrep
+fzf
+jq
+git
+nodejs
+python3

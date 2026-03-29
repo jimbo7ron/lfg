@@ -1,0 +1,9 @@
+# Homebrew packages (macOS)
+vim
+tmux
+ripgrep
+fzf
+jq
+git
+node
+python3
