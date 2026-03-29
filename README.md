@@ -5,7 +5,7 @@ A dotfile and machine setup tool. Deploy configs, install software, track drift,
 ## Quick start
 
 ```bash
-git clone <this-repo> ~/lfg
+git clone https://github.com/jimbo7ron/lfg.git ~/lfg
 cd ~/lfg
 cp machine.conf.example machine.conf   # edit with your details
 ./lfg config                            # deploy all dotfiles
