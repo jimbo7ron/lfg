@@ -1,44 +1,8 @@
-# .tmux.conf -- managed by lfg
-
-# Prefix
-set -g prefix {{TMUX_PREFIX}}
-
-# General
+# Tmux configuration
 set -g default-terminal "{{TERM}}"
 set -g default-shell "{{TMUX_SHELL}}"
+set -g prefix {{TMUX_PREFIX}}
 set -g mouse on
+set -g history-limit 10000
 set -g base-index 1
 setw -g pane-base-index 1
-set -g renumber-windows on
-set -g history-limit 50000
-set -sg escape-time 10
-set -g focus-events on
-
-# Status bar
-set -g status-position bottom
-set -g status-style 'bg=colour235 fg=colour255'
-set -g status-left ' #S '
-set -g status-right ' %Y-%m-%d %H:%M '
-
-# Window/pane splitting
-bind | split-window -h -c "#{pane_current_path}"
-bind - split-window -v -c "#{pane_current_path}"
-bind c new-window -c "#{pane_current_path}"
-
-# Pane navigation (vim-style)
-bind h select-pane -L
-bind j select-pane -D
-bind k select-pane -U
-bind l select-pane -R
-
-# Resize panes
-bind -r H resize-pane -L 5
-bind -r J resize-pane -D 5
-bind -r K resize-pane -U 5
-bind -r L resize-pane -R 5
-
-# Reload config
-bind r source-file ~/.tmux.conf \; display "Config reloaded"
-
-# Local overrides
-if-shell "[ -f ~/.tmux.conf.local ]" "source-file ~/.tmux.conf.local"

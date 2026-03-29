@@ -3,7 +3,7 @@
 cd "$(dirname "$0")"
 
 # Make scripts executable
-chmod +x lfg software/common.sh packages/claude/.claude/install.sh
+chmod +x lfg software/common.sh packages/claude/install.sh
 chmod +x test/run_tests.sh test/run_docker.sh
 
 # Remove old non-mirrored files from v1 structure

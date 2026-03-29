@@ -21,6 +21,18 @@ log_error() { printf "${RED}●${RESET} %s\n" "$*" >&2; }
 log_blue()  { printf "${BLUE}●${RESET} %s\n" "$*"; }
 log_header(){ printf "\n${BOLD}${CYAN}── %s ──${RESET}\n" "$*"; }
 
+# ── Input Validation ─────────────────────────────────────────────────────────
+
+validate_name() {
+    local name="$1"
+    local label="${2:-name}"
+    if [[ "$name" =~ [/\\] || "$name" == ".." || "$name" == "." || -z "$name" ]]; then
+        log_error "Invalid $label: $name"
+        return 1
+    fi
+    return 0
+}
+
 # ── OS Detection ─────────────────────────────────────────────────────────────
 
 detect_os() {
@@ -50,6 +62,9 @@ load_config() {
 
 # ── Template Processing ──────────────────────────────────────────────────────
 
+# Variables that should not be empty when deploying
+REQUIRED_VARS="GIT_NAME GIT_EMAIL"
+
 process_template() {
     local src="$1"
     local content
@@ -59,6 +74,7 @@ process_template() {
     local var_refs
     var_refs=$(printf '%s' "$content" | grep -oE '\{\{[A-Za-z_][A-Za-z0-9_]*\}\}' | sort -u)
 
+    local has_unresolved=0
     for var_ref in $var_refs; do
         # Strip {{ and }} to get the var name
         local var_name="${var_ref#\{\{}"
@@ -68,13 +84,23 @@ process_template() {
         local var_value="${!env_var:-}"
 
         if [[ -z "$var_value" ]]; then
-            log_warn "Unresolved template variable: {{${var_name}}} in $(basename "$src")"
+            # Check if this is a required variable
+            if [[ " $REQUIRED_VARS " == *" $var_name "* ]]; then
+                log_error "Required variable DOTS_${var_name} is empty — set it in machine.conf"
+                has_unresolved=1
+            else
+                log_warn "Unresolved template variable: {{${var_name}}} in $(basename "$src")"
+            fi
             continue
         fi
 
         # Replace all occurrences using bash string replacement
         content="${content//"{{${var_name}}}"/"$var_value"}"
     done
+
+    if [[ "$has_unresolved" -eq 1 ]]; then
+        return 1
+    fi
 
     printf '%s\n' "$content"
 }
@@ -97,6 +123,25 @@ ensure_parent_dir() {
     local dir
     dir="$(dirname "$1")"
     [[ -d "$dir" ]] || mkdir -p "$dir"
+}
+
+set_secure_permissions() {
+    local dest="$1"
+    local rel="${dest#"$HOME/"}"
+
+    case "$rel" in
+        .ssh/*)
+            chmod 700 "$HOME/.ssh" 2>/dev/null || true
+            chmod 600 "$dest" 2>/dev/null || true
+            ;;
+        .gitconfig)
+            chmod 600 "$dest" 2>/dev/null || true
+            ;;
+        .claude/*)
+            chmod 700 "$HOME/.claude" 2>/dev/null || true
+            chmod 600 "$dest" 2>/dev/null || true
+            ;;
+    esac
 }
 
 backup_file() {
@@ -149,7 +194,7 @@ list_packages() {
     local pkg_dir="$LFG_DIR/packages"
     for dir in "$pkg_dir"/*/; do
         [[ -d "$dir" ]] && basename "$dir"
-    done
+    done | sort
 }
 
 get_package_files() {
@@ -198,6 +243,7 @@ install_package() {
                 [[ "$NO_BACKUP" != "true" ]] && backup_file "$dest"
                 ensure_parent_dir "$dest"
                 printf '%s\n' "$processed" > "$dest"
+                set_secure_permissions "$dest"
                 log_info "Installed: ${dest#"$HOME/"}"
             fi
         else
@@ -210,19 +256,17 @@ install_package() {
             else
                 [[ "$NO_BACKUP" != "true" ]] && backup_file "$dest"
                 copy_file "$file" "$dest"
+                set_secure_permissions "$dest"
                 log_info "Installed: ${dest#"$HOME/"}"
             fi
         fi
     done <<< "$files"
 
-    # Run install hook if present
-    if [[ -f "$pkg_dir/install.sh" || -f "$pkg_dir/.claude/install.sh" || -f "$pkg_dir/.ssh/install.sh" ]]; then
-        local hook
-        hook=$(find "$pkg_dir" -name "install.sh" -type f 2>/dev/null | head -1)
-        if [[ -n "$hook" && "$DRY_RUN" != "true" ]]; then
-            log_blue "Running install hook for $package"
-            source "$hook"
-        fi
+    # Run install hook if present (always at package root)
+    local hook="$pkg_dir/install.sh"
+    if [[ -f "$hook" && "$DRY_RUN" != "true" ]]; then
+        log_blue "Running install hook for $package"
+        ( source "$hook" )
     fi
 }
 
@@ -258,11 +302,9 @@ save_package() {
         deployed_content=$(<"$dest")
 
         if [[ "$file" == *.tmpl ]]; then
-            # Template file — save as plain file, warn about baked-in values
-            local plain_file="${file%.tmpl}"
+            # Template file — compare against rendered template
             local repo_content=""
-            [[ -f "$plain_file" ]] && repo_content=$(<"$plain_file")
-            [[ -f "$file" ]] && repo_content=$(process_template "$file")
+            [[ -f "$file" ]] && repo_content=$(process_template "$file") || true
 
             if [[ "$deployed_content" != "$repo_content" ]]; then
                 if [[ "$DRY_RUN" == "true" ]]; then
@@ -270,11 +312,9 @@ save_package() {
                     diff -u --color=always <(printf '%s\n' "$repo_content") "$dest" 2>/dev/null || \
                         diff -u <(printf '%s\n' "$repo_content") "$dest" 2>/dev/null || true
                 else
-                    log_warn "Saving ${dest#"$HOME/"} as plain file (template variables baked in)"
-                    # Remove old .tmpl, save as plain
-                    cp "$dest" "${file%.tmpl}"
-                    rm -f "$file"
-                    log_info "Saved: ${dest#"$HOME/"}"
+                    log_warn "Template drift in ${dest#"$HOME/"} — update the .tmpl file manually"
+                    log_blue "  repo template: ${file#"$LFG_DIR/"}"
+                    log_blue "  deployed file: $dest"
                     changed=1
                 fi
             else
@@ -292,6 +332,7 @@ save_package() {
                         diff -u "$file" "$dest" 2>/dev/null || true
                 else
                     cp "$dest" "$file"
+                    SAVED_FILES+=("$file")
                     log_info "Saved: ${dest#"$HOME/"}"
                     changed=1
                 fi
@@ -362,7 +403,9 @@ read_manifest() {
     while IFS= read -r line; do
         # Skip comments and blank lines
         line="${line%%#*}"
-        line="${line// /}"
+        # Trim leading and trailing whitespace
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
         [[ -z "$line" ]] && continue
         echo "$line"
     done < "$file"
@@ -483,16 +526,26 @@ check_for_updates() {
             printf "  ${CYAN}%s${RESET}\n" "$line"
         done
 
-        printf "\n${BOLD}Pull and re-apply? [y/N]${RESET} "
-        read -r answer
-        if [[ "$answer" =~ ^[Yy]$ ]]; then
-            do_update
+        if [[ -t 0 ]]; then
+            printf "\n${BOLD}Pull and re-apply? [y/N]${RESET} "
+            read -r answer
+            if [[ "$answer" =~ ^[Yy]$ ]]; then
+                do_update
+            fi
+        else
+            log_warn "Run './lfg update' to pull and re-apply"
         fi
     fi
 }
 
 do_update() {
     log_header "Updating"
+
+    if ! git -C "$LFG_DIR" diff-index --quiet HEAD -- 2>/dev/null; then
+        log_error "Working tree has uncommitted changes — commit or stash before updating"
+        return 1
+    fi
+
     git -C "$LFG_DIR" pull --rebase
     log_info "Pulled latest changes"
 
@@ -517,6 +570,7 @@ init_backup() {
     fi
     BACKUP_DIR="$LFG_DIR/backups/$(date +%Y-%m-%dT%H-%M-%S)"
     mkdir -p "$BACKUP_DIR"
+    chmod 700 "$BACKUP_DIR"
     export BACKUP_DIR
 }
 
@@ -533,8 +587,11 @@ restore_backup() {
 
     log_header "Restoring from $timestamp"
 
-    # First, back up current state
-    init_backup
+    # First, back up current state (use distinct dir to avoid overwriting the restore source)
+    BACKUP_DIR="$LFG_DIR/backups/$(date +%Y-%m-%dT%H-%M-%S)-pre-restore"
+    mkdir -p "$BACKUP_DIR"
+    chmod 700 "$BACKUP_DIR"
+    export BACKUP_DIR
     log_blue "Backing up current state first"
 
     find "$backup_dir" -type f -print0 | while IFS= read -r -d '' file; do

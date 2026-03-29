@@ -1,26 +1,11 @@
 [user]
-	name = {{GIT_NAME}}
-	email = {{GIT_EMAIL}}
-[init]
-	defaultBranch = main
-[pull]
-	ff = only
-	rebase = true
-[fetch]
-	prune = true
-[push]
-	default = simple
-[core]
-	autocrlf = input
-	filemode = false
-[color]
-	ui = auto
+    name = {{GIT_NAME}}
+    email = {{GIT_EMAIL}}
 [credential]
-	helper = {{GIT_CREDENTIAL_HELPER}}
-[rebase]
-	autoStash = true
-	updateRefs = true
-[merge]
-	ff = only
-[diff]
-	ignoreSubmodules = dirty
+    helper = {{GIT_CREDENTIAL_HELPER}}
+[core]
+    editor = {{EDITOR}}
+[init]
+    defaultBranch = main
+[pull]
+    rebase = true

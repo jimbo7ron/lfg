@@ -1,37 +1,5 @@
-# .bashrc -- managed by lfg
-
+# Bash configuration
 export EDITOR="{{EDITOR}}"
 export TERM="{{TERM}}"
 export HISTSIZE={{HISTSIZE}}
 export HISTFILESIZE={{HISTSIZE}}
-export HISTCONTROL=ignoreboth:erasedups
-
-# PATH additions
-if [[ -n "{{PATH_EXTRA}}" ]]; then
-    export PATH="{{PATH_EXTRA}}:$PATH"
-fi
-
-# Shell options
-shopt -s histappend
-shopt -s checkwinsize
-shopt -s cdspell
-
-# Prompt
-PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
-
-# Aliases
-alias ll='ls -lah'
-alias la='ls -A'
-alias gs='git status'
-alias gd='git diff'
-alias gl='git log --oneline -20'
-
-# Completion
-if [[ -f /etc/bash_completion ]]; then
-    source /etc/bash_completion
-elif [[ -f /usr/share/bash-completion/bash_completion ]]; then
-    source /usr/share/bash-completion/bash_completion
-fi
-
-# Local overrides (not managed by lfg)
-[[ -f "$HOME/.bashrc.local" ]] && source "$HOME/.bashrc.local"

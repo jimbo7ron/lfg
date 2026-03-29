@@ -3,6 +3,8 @@
 # Custom dotfile & machine setup tool
 set -euo pipefail
 
+LFG_VERSION="0.1.0"
+
 # Resolve script directory (works with symlinks)
 LFG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export LFG_DIR
@@ -41,6 +43,7 @@ ${BOLD}Options:${RESET}
   --no-backup         Skip backup step (config only)
   --push              Commit and push after save
   -h, --help          Show this help
+  -v, --version       Show version
 
 ${BOLD}Examples:${RESET}
   ./lfg config                Deploy all dotfile configs
@@ -61,7 +64,6 @@ EOF
 cmd_config() {
     local packages=("$@")
 
-    detect_os
     load_config
 
     # Check for updates before installing
@@ -92,7 +94,7 @@ cmd_config() {
 cmd_install() {
     local packages=("$@")
     load_config
-    install_software "${packages[@]}"
+    install_software ${packages[@]+"${packages[@]}"}
 }
 
 cmd_save() {
@@ -101,6 +103,8 @@ cmd_save() {
     load_config
 
     local any_changed=0
+    SAVED_FILES=()
+    export SAVED_FILES
 
     if [[ ${#packages[@]} -eq 0 ]]; then
         while IFS= read -r pkg; do
@@ -120,8 +124,10 @@ cmd_save() {
     if [[ "$PUSH" == "true" && "$any_changed" -eq 1 ]]; then
         log_header "Pushing changes"
         cd "$LFG_DIR"
-        git add -A
-        git commit -m "lfg save: update dotfiles from $(hostname -s)"
+        if [[ ${#SAVED_FILES[@]} -gt 0 ]]; then
+            git add "${SAVED_FILES[@]}"
+        fi
+        git commit -m "lfg save: update dotfiles"
         git push
         log_info "Pushed to remote"
     fi
@@ -168,6 +174,7 @@ cmd_restore() {
         ls "$LFG_DIR/backups/" 2>/dev/null || echo "  (none)"
         return 1
     fi
+    validate_name "$timestamp" "timestamp" || return 1
     restore_backup "$timestamp"
 }
 
@@ -177,6 +184,7 @@ cmd_add() {
         log_error "Usage: ./lfg add <package-name>"
         return 1
     fi
+    validate_name "$name" "package" || return 1
     add_package "$name"
 }
 
@@ -219,6 +227,7 @@ main() {
             --no-backup) NO_BACKUP="true"; shift ;;
             --push)     PUSH="true"; shift ;;
             -h|--help)  usage; exit 0 ;;
+            -v|--version) echo "lfg $LFG_VERSION"; exit 0 ;;
             config|install|save|verify|update|restore|add|list)
                 if [[ -z "$command" ]]; then
                     command="$1"
@@ -239,11 +248,19 @@ main() {
         exit 0
     fi
 
+    # Detect OS once for all commands
+    detect_os
+
+    # Validate package name arguments
+    for arg in ${args[@]+"${args[@]}"}; do
+        validate_name "$arg" "package" || exit 1
+    done
+
     case "$command" in
-        config)  cmd_config "${args[@]}" ;;
-        install) cmd_install "${args[@]}" ;;
-        save)    cmd_save "${args[@]}" ;;
-        verify)  cmd_verify "${args[@]}" ;;
+        config)  cmd_config ${args[@]+"${args[@]}"} ;;
+        install) cmd_install ${args[@]+"${args[@]}"} ;;
+        save)    cmd_save ${args[@]+"${args[@]}"} ;;
+        verify)  cmd_verify ${args[@]+"${args[@]}"} ;;
         update)  cmd_update ;;
         restore) cmd_restore "${args[0]:-}" ;;
         add)     cmd_add "${args[0]:-}" ;;

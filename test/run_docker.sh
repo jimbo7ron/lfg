@@ -2,7 +2,8 @@
 # Build and run the test container
 set -e
 
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 echo "Building test container..."
 docker build -f test/Dockerfile -t lfg-test .

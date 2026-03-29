@@ -1,12 +1,18 @@
-" .vimrc -- managed by lfg
-
+" Vim configuration
 syntax on
 set number
-set background=dark
+set relativenumber
+set tabstop=4
+set shiftwidth=4
+set expandtab
+set autoindent
+set smartindent
+set hlsearch
+set incsearch
+set ignorecase
+set smartcase
+set ruler
+set showcmd
+set wildmenu
+set backspace=indent,eol,start
 colorscheme dracula
-autocmd FileType python setlocal expandtab shiftwidth=4 tabstop=4 softtabstop=4
-
-" Local overrides
-if filereadable(expand("~/.vimrc.local"))
-    source ~/.vimrc.local
-endif

@@ -34,11 +34,6 @@ RUN printf 'DOTS_GIT_NAME="Test User"\nDOTS_GIT_EMAIL="test@example.com"\nDOTS_G
 # Make scripts executable
 RUN chmod +x /home/testuser/lfg/lfg \
     /home/testuser/lfg/software/common.sh \
-    /home/testuser/lfg/packages/claude/.claude/install.sh
-
-# Clean up old v1 files if present
-RUN rm -f /home/testuser/lfg/packages/vim/.vimrc.tmpl \
-    /home/testuser/lfg/packages/claude/settings.json.tmpl \
-    /home/testuser/lfg/packages/claude/install.sh 2>/dev/null; true
+    /home/testuser/lfg/packages/claude/install.sh
 
 ENTRYPOINT ["bash", "/home/testuser/lfg/test/run_tests.sh"]

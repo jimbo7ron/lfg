@@ -1,0 +1,21 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up test environment
+        run: |
+          printf 'DOTS_GIT_NAME="Test User"\nDOTS_GIT_EMAIL="test@example.com"\nDOTS_GIT_CREDENTIAL_HELPER="cache"\n' > machine.conf
+          chmod +x lfg software/common.sh packages/claude/install.sh test/run_tests.sh
+
+      - name: Run tests
+        run: bash test/run_tests.sh
