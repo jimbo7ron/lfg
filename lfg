@@ -52,12 +52,14 @@ ${BOLD}Options:${RESET}
 ${BOLD}Examples:${RESET}
   ./lfg config                Deploy all dotfile configs
   ./lfg config zsh vim        Deploy only zsh and vim configs
-  ./lfg config --dry-run      Preview config changes
+  ./lfg config --dry-run      Preview config changes (incl. install hooks)
   ./lfg install               Install all system software
   ./lfg install ripgrep fzf   Install specific packages
   ./lfg save zsh              Save local ~/.zshrc back into repo
   ./lfg save --push           Save all and push to remote
   ./lfg verify                Check all packages for drift
+  ./lfg verify --losses       Show only lines that would disappear on deploy
+  ./lfg verify --diff         Full unified diff for drifted files
   ./lfg update                Pull remote changes, re-apply
   ./lfg list                  Show packages and status
 EOF

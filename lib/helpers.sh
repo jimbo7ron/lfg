@@ -3,14 +3,17 @@
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 
+# ANSI-C quoting ($'...') embeds the real ESC byte so colour codes work
+# both in printf (which would interpret escapes itself) and in cat heredocs
+# (which pass bytes through verbatim) — e.g. the usage() output.
 if [[ -t 1 ]]; then
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    YELLOW='\033[0;33m'
-    BLUE='\033[0;34m'
-    CYAN='\033[0;36m'
-    BOLD='\033[1m'
-    RESET='\033[0m'
+    RED=$'\033[0;31m'
+    GREEN=$'\033[0;32m'
+    YELLOW=$'\033[0;33m'
+    BLUE=$'\033[0;34m'
+    CYAN=$'\033[0;36m'
+    BOLD=$'\033[1m'
+    RESET=$'\033[0m'
 else
     RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' RESET=''
 fi
@@ -274,10 +277,20 @@ install_package() {
     # hook stdin to /dev/null so the package loop's stdin (fed from
     # list_packages) can't leak into hook commands like ssh-keygen. Hooks
     # that want interactive prompts should read from /dev/tty themselves.
+    # Hooks run in dry-run too (DRY_RUN is exported); the hook itself must
+    # branch early and do read-only reporting when DRY_RUN=true.
     local hook="$pkg_dir/install.sh"
-    if [[ -f "$hook" && "$DRY_RUN" != "true" ]]; then
-        log_blue "Running install hook for $package"
-        ( source "$hook" ) </dev/null
+    if [[ -f "$hook" ]]; then
+        if [[ "${LFG_SKIP_HOOKS:-0}" == "1" ]]; then
+            log_blue "Skipping install hook for $package (LFG_SKIP_HOOKS=1)"
+        else
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log_blue "Dry-run: install hook for $package"
+            else
+                log_blue "Running install hook for $package"
+            fi
+            ( source "$hook" ) </dev/null
+        fi
     fi
 }
 

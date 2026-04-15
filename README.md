@@ -64,6 +64,8 @@ On a fresh machine:
 - 8 packages deploy: `bash`, `claude`, `git`, `hostname`, `ssh`, `tmux`, `vim`, `zsh`
 - The `git` hook generates `~/.ssh/id_ed25519` if missing, loads it into ssh-agent (Keychain-backed on macOS), appends the pubkey to `~/.config/git/allowed_signers`, and uploads to GitHub as auth + signing key
 - The `git` hook then offers an interactive `ssh-copy-id` prompt — enter `user@host` to push the key to a remote, or blank to skip
+- The `claude` hook installs Claude Code natively via the official installer (`curl -fsSL https://claude.ai/install.sh | bash`) if `claude` isn't already on `PATH`
+- The `vim` hook downloads the dracula colorscheme into `~/.vim/{colors,autoload}/`
 - The `hostname` hook applies `DOTS_HOSTNAME` if set (prompts for sudo)
 
 **7. Verify**
@@ -136,6 +138,7 @@ packages/
     .zshrc.tmpl           -> ~/.zshrc (template, processed)
   vim/
     .vimrc                -> ~/.vimrc (plain copy)
+    install.sh            -> downloads dracula colorscheme
   git/
     .gitconfig.tmpl       -> ~/.gitconfig (template)
     install.sh            -> SSH keygen, agent load, allowed_signers, gh upload
@@ -143,7 +146,7 @@ packages/
     .ssh/config           -> ~/.ssh/config
   claude/
     .claude/settings.json.tmpl -> ~/.claude/settings.json
-    install.sh            -> sets ~/.claude dir perms
+    install.sh            -> installs native Claude Code + sets ~/.claude perms
   tmux/
     .tmux.conf.tmpl       -> ~/.tmux.conf
   bash/
@@ -154,14 +157,16 @@ packages/
 
 - **Plain files** are copied as-is.
 - **`.tmpl` files** have `{{VAR}}` placeholders replaced with values from config before deploying. The `.tmpl` suffix is stripped in the deployed path.
-- **`install.sh`** at the package root runs after the package is deployed (skipped in dry-run). Hooks run in a subshell with stdin redirected to `/dev/null` so interactive commands can't consume the package loop's stdin; hooks that need to prompt read from `/dev/tty` directly.
+- **`install.sh`** at the package root runs after the package is deployed. Hooks run in a subshell with stdin redirected to `/dev/null` so interactive commands can't consume the package loop's stdin; hooks that need to prompt read from `/dev/tty` directly.
+- **Hook dry-run contract**: install hooks are *also* run under `./lfg config --dry-run`, with `DRY_RUN=true` exported. Hooks must branch on `DRY_RUN` at the top, inspect current state, print what they *would* change, and `exit 0` before doing anything destructive. This makes every mutation visible in the dry-run preview.
 
 ### Install hooks
 
 | Package | What the hook does |
 |---------|-------------------|
 | `git` | Generates `~/.ssh/id_ed25519` if missing, loads into ssh-agent (Keychain-backed on macOS), appends pubkey to `~/.config/git/allowed_signers`, uploads to GitHub as auth + signing key via `gh` if authenticated, and optionally runs `ssh-copy-id` to remote hosts you enter interactively |
-| `claude` | Sets `~/.claude` to `chmod 700` |
+| `claude` | Sets `~/.claude` to `chmod 700`; installs Claude Code natively via `curl -fsSL https://claude.ai/install.sh \| bash` if `claude` isn't already on `PATH` |
+| `vim` | Downloads the dracula colorscheme (referenced by `.vimrc`) into `~/.vim/colors/` and `~/.vim/autoload/` if missing |
 | `hostname` | If `DOTS_HOSTNAME` is set and differs from the current hostname, applies it via `scutil` (macOS) or `hostnamectl` (Linux). Requires sudo and a tty. No-op otherwise |
 
 All hooks are idempotent — they detect existing state and skip.
@@ -185,7 +190,7 @@ Variables are defined in `defaults.conf` (committed) and optionally overridden i
 | `DOTS_HISTSIZE` | `{{HISTSIZE}}` | `10000` |
 | `DOTS_CLAUDE_MODEL` | `{{CLAUDE_MODEL}}` | `claude-sonnet-4-6` |
 | `DOTS_CLAUDE_PERMISSIONS_ALLOW` | `{{CLAUDE_PERMISSIONS_ALLOW}}` | 11-entry list incl. `Bash(*)`, `Agent`, `Skill`, `NotebookEdit` |
-| `DOTS_HOSTNAME` | *(not templated; read by hostname hook)* | *(unset — set per machine in `machine.conf`)* |
+| `DOTS_HOSTNAME` | *(not templated; read by hostname hook)* | `""` — empty means hostname is left untouched; override in `machine.conf` |
 
 `GIT_NAME` and `GIT_EMAIL` are required — lfg will error if they are empty when deploying templates that use them. They have sensible defaults in `defaults.conf` so new machines work out of the box; override in `machine.conf` if needed.
 
@@ -193,13 +198,16 @@ The Claude settings template also hardcodes structured `permissions.deny` and `p
 
 ### Machine config
 
-Copy the example and customize for each machine:
+`defaults.conf` (committed) holds every `DOTS_*` variable with its default. To override on a specific machine, create `machine.conf` (gitignored) next to it and redefine just the variables you care about:
 
 ```bash
-cp machine.conf.example machine.conf
+cat > machine.conf <<'EOF'
+DOTS_HOSTNAME="mbp-james"
+DOTS_GIT_EMAIL="you@example.com"
+EOF
 ```
 
-`machine.conf` is gitignored so per-machine values (name, email, credential helper) never leak into the repo.
+`machine.conf` is sourced after `defaults.conf`, so its values win. Per-machine values never leak into the repo.
 
 ### Backups
 

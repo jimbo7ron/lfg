@@ -6,6 +6,11 @@ set -euo pipefail
 # otherwise load test-generated keys into the live per-user agent.
 unset SSH_AUTH_SOCK
 
+# Skip network / side-effecting install hooks during tests. Hooks read
+# LFG_SKIP_HOOKS and early-exit when set (the plain dotfile deploys still
+# run, which is what the tests actually verify).
+export LFG_SKIP_HOOKS=1
+
 LFG="$HOME/lfg/lfg"
 PASS=0
 FAIL=0

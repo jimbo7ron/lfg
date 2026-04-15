@@ -18,7 +18,7 @@ jobs:
           cp -r "$GITHUB_WORKSPACE" ~/lfg
           cd ~/lfg
           printf 'DOTS_GIT_NAME="Test User"\nDOTS_GIT_EMAIL="test@example.com"\nDOTS_GIT_CREDENTIAL_HELPER="cache"\n' > machine.conf
-          chmod +x lfg software/common.sh packages/claude/install.sh test/run_tests.sh
+          chmod +x lfg software/common.sh packages/*/install.sh test/run_tests.sh
 
       - name: Run tests
         run: bash ~/lfg/test/run_tests.sh

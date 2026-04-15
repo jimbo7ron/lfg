@@ -2,10 +2,49 @@
 # Git package install hook — set up SSH signing key and allowed_signers.
 # Idempotent: generates the keypair only if missing, appends to
 # allowed_signers only if absent, uploads to GitHub only if not already there.
+# Dry-run aware: inspects current state and reports what would change.
 set -euo pipefail
 
 key="$HOME/.ssh/id_ed25519"
 pub="$key.pub"
+allowed="$HOME/.config/git/allowed_signers"
+
+# ── Dry-run branch: inspect only, report what would happen ──────────────────
+
+if [[ "${DRY_RUN:-false}" == "true" ]]; then
+    if [[ ! -f "$key" ]]; then
+        echo "SSH key: would generate ed25519 at $key"
+    else
+        echo "SSH key: exists at $key"
+    fi
+
+    if [[ -f "$pub" ]]; then
+        line="$DOTS_GIT_EMAIL $(awk '{print $1, $2}' "$pub")"
+        if [[ ! -f "$allowed" ]] || ! grep -qxF "$line" "$allowed" 2>/dev/null; then
+            echo "allowed_signers: would append this machine's pubkey"
+        else
+            echo "allowed_signers: already contains this machine's pubkey"
+        fi
+
+        if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+            pub_data=$(awk '{print $2}' "$pub")
+            if gh ssh-key list 2>/dev/null | grep -q "$pub_data"; then
+                echo "GitHub: pubkey already registered"
+            else
+                echo "GitHub: would upload pubkey (auth + signing)"
+            fi
+        else
+            echo "GitHub: gh not authenticated — would print manual upload URL"
+        fi
+    else
+        echo "allowed_signers / GitHub: would run after key generation"
+    fi
+
+    echo "ssh-copy-id: would prompt for remote host(s) when run interactively"
+    exit 0
+fi
+
+# ── Real install path ───────────────────────────────────────────────────────
 
 mkdir -p "$HOME/.ssh" "$HOME/.config/git"
 chmod 700 "$HOME/.ssh"
@@ -24,7 +63,6 @@ else
 fi
 
 # Append this machine's pubkey to allowed_signers if not already present.
-allowed="$HOME/.config/git/allowed_signers"
 touch "$allowed"
 line="$DOTS_GIT_EMAIL $(awk '{print $1, $2}' "$pub")"
 if ! grep -qxF "$line" "$allowed"; then
