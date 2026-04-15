@@ -94,8 +94,12 @@ process_template() {
             continue
         fi
 
-        # Replace all occurrences using bash string replacement
-        content="${content//"{{${var_name}}}"/"$var_value"}"
+        # Replace all occurrences using bash string replacement.
+        # Pattern and replacement are left unquoted inside the expansion:
+        # nesting quotes here causes bash to inject literal "…" around the
+        # replacement, producing e.g. ""vim"" instead of "vim".
+        local pattern="{{${var_name}}}"
+        content="${content//$pattern/$var_value}"
     done
 
     if [[ "$has_unresolved" -eq 1 ]]; then
@@ -233,9 +237,13 @@ install_package() {
         dest=$(resolve_target_path "$pkg_dir" "$file")
 
         if [[ "$file" == *.tmpl ]]; then
-            # Template: process and copy
+            # Template: process and copy. Skip this file (not the whole run)
+            # if required variables are missing — other packages can still
+            # be previewed/installed.
             local processed
-            processed=$(process_template "$file")
+            if ! processed=$(process_template "$file"); then
+                continue
+            fi
 
             if [[ "$DRY_RUN" == "true" ]]; then
                 diff_file "$processed" "$dest"
@@ -262,11 +270,14 @@ install_package() {
         fi
     done <<< "$files"
 
-    # Run install hook if present (always at package root)
+    # Run install hook if present (always at package root). Always redirect
+    # hook stdin to /dev/null so the package loop's stdin (fed from
+    # list_packages) can't leak into hook commands like ssh-keygen. Hooks
+    # that want interactive prompts should read from /dev/tty themselves.
     local hook="$pkg_dir/install.sh"
     if [[ -f "$hook" && "$DRY_RUN" != "true" ]]; then
         log_blue "Running install hook for $package"
-        ( source "$hook" )
+        ( source "$hook" ) </dev/null
     fi
 }
 
@@ -375,7 +386,10 @@ verify_package() {
 
         local expected
         if [[ "$file" == *.tmpl ]]; then
-            expected=$(process_template "$file")
+            if ! expected=$(process_template "$file"); then
+                drift=1
+                continue
+            fi
         else
             expected=$(<"$file")
         fi
@@ -388,6 +402,19 @@ verify_package() {
         else
             printf "${YELLOW}~ Drift: %s${RESET}\n" "$rel"
             drift=1
+            # --diff:   full unified diff (live → what deploy would write)
+            # --losses: just the lines that would disappear (lines in live
+            #           that aren't in the rendered template / repo file)
+            if [[ "${VERIFY_DIFF:-false}" == "true" || "${VERIFY_LOSSES:-false}" == "true" ]]; then
+                local diff_out
+                diff_out=$(diff -u "$dest" <(printf '%s\n' "$expected") 2>/dev/null || true)
+                if [[ "${VERIFY_LOSSES:-false}" == "true" ]]; then
+                    # Skip diff headers (---/+++) and only show '-' lines
+                    echo "$diff_out" | grep -E '^-[^-]' | sed 's/^-/  - /' || true
+                else
+                    echo "$diff_out"
+                fi
+            fi
         fi
     done <<< "$files"
 

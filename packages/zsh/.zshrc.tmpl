@@ -3,9 +3,31 @@ export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="{{ZSH_THEME}}"
 plugins=({{ZSH_PLUGINS}})
 
+# Pick up tool-provided completions (e.g. rustup, gh)
+fpath+=~/.zfunc
+
 [ -f "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
+
+# Prepend short hostname to robbyrussell prompt
+PROMPT="%{$fg[yellow]%}%m%{$reset_color%} $PROMPT"
+
+# Vi-mode line editing with [NORMAL]/[INSERT] indicator on the right
+bindkey -v
+function zle-line-init zle-keymap-select {
+  case $KEYMAP in
+    vicmd)      RPROMPT="%{$fg[red]%}[NORMAL]%{$reset_color%}" ;;
+    main|viins) RPROMPT="%{$fg[green]%}[INSERT]%{$reset_color%}" ;;
+  esac
+  zle reset-prompt
+}
+zle -N zle-line-init
+zle -N zle-keymap-select
+# Reduce mode-switch lag (default is 400ms)
+export KEYTIMEOUT=15
 
 export EDITOR="{{EDITOR}}"
 export TERM="{{TERM}}"
 export HISTSIZE={{HISTSIZE}}
 export SAVEHIST={{HISTSIZE}}
+
+export PATH="$HOME/.local/bin:$PATH"

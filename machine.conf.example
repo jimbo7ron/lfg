@@ -5,8 +5,7 @@
 # All variables are prefixed with DOTS_ and referenced in templates
 # without the prefix: DOTS_EDITOR -> {{EDITOR}} in templates.
 
-# DOTS_GIT_NAME="Your Name"
-# DOTS_GIT_EMAIL="you@example.com"
+# DOTS_HOSTNAME="mbp-james"  # applied by packages/hostname on ./lfg config
 # DOTS_EDITOR="nvim"
 # DOTS_SHELL="zsh"
 # DOTS_TERM="xterm-256color"

@@ -2,6 +2,10 @@
 # test/run_tests.sh -- Test suite for lfg
 set -euo pipefail
 
+# Isolate the real user's ssh-agent — install hooks run ssh-add, which would
+# otherwise load test-generated keys into the live per-user agent.
+unset SSH_AUTH_SOCK
+
 LFG="$HOME/lfg/lfg"
 PASS=0
 FAIL=0

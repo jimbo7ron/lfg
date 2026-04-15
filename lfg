@@ -17,7 +17,9 @@ source "$LFG_DIR/lib/helpers.sh"
 DRY_RUN="false"
 NO_BACKUP="false"
 PUSH="false"
-export DRY_RUN NO_BACKUP PUSH
+VERIFY_DIFF="false"
+VERIFY_LOSSES="false"
+export DRY_RUN NO_BACKUP PUSH VERIFY_DIFF VERIFY_LOSSES
 
 # ── Usage ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +44,8 @@ ${BOLD}Options:${RESET}
   --dry-run           Show what would change without applying
   --no-backup         Skip backup step (config only)
   --push              Commit and push after save
+  --diff              Show full unified diff for drifted files (verify only)
+  --losses            Show only lines that would be lost on deploy (verify only)
   -h, --help          Show this help
   -v, --version       Show version
 
@@ -196,7 +200,7 @@ cmd_list() {
     while IFS= read -r pkg; do
         local pkg_dir="$LFG_DIR/packages/$pkg"
         local file_count
-        file_count=$(get_package_files "$pkg" | grep -c . 2>/dev/null || echo "0")
+        file_count=$(get_package_files "$pkg" | grep -c . || true)
         local tmpl_count
         tmpl_count=$(find "$pkg_dir" -name "*.tmpl" -type f 2>/dev/null | wc -l | tr -d ' ')
 
@@ -226,6 +230,8 @@ main() {
             --dry-run)  DRY_RUN="true"; shift ;;
             --no-backup) NO_BACKUP="true"; shift ;;
             --push)     PUSH="true"; shift ;;
+            --diff)     VERIFY_DIFF="true"; shift ;;
+            --losses)   VERIFY_LOSSES="true"; shift ;;
             -h|--help)  usage; exit 0 ;;
             -v|--version) echo "lfg $LFG_VERSION"; exit 0 ;;
             config|install|save|verify|update|restore|add|list)

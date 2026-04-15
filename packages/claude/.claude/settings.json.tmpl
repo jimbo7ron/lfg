@@ -1,6 +1,39 @@
 {
+  "alwaysThinkingEnabled": true,
   "model": "{{CLAUDE_MODEL}}",
   "permissions": {
+    "deny": [
+      "Bash(rm -rf /:*)",
+      "Bash(git push --force*:*)",
+      "Bash(git push -f*:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -fd:*)",
+      "Bash(mkfs:*)",
+      "Bash(fdisk:*)"
+    ],
+    "ask": [
+      "Bash(npm publish:*)",
+      "Bash(pip upload:*)",
+      "Bash(chown:*)",
+      "Bash(diskutil:*)",
+      "Bash(mount:*)",
+      "Bash(umount:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker rmi:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker container prune:*)",
+      "Bash(docker image prune:*)",
+      "Bash(docker network rm:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(gh pr merge --admin:*)",
+      "Bash(aws s3 rm:*)",
+      "Bash(aws s3 rb:*)",
+      "Bash(aws ec2 terminate-instances:*)",
+      "Bash(aws rds delete-db-instance:*)",
+      "Bash(aws rds delete-db-cluster:*)",
+      "Bash(aws dynamodb delete-table:*)"
+    ],
     "allow": {{CLAUDE_PERMISSIONS_ALLOW}}
   }
 }

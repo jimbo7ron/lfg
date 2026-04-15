@@ -1,6 +1,7 @@
 [user]
     name = {{GIT_NAME}}
     email = {{GIT_EMAIL}}
+    signingkey = ~/.ssh/id_ed25519.pub
 [credential]
     helper = {{GIT_CREDENTIAL_HELPER}}
 [core]
@@ -9,3 +10,15 @@
     defaultBranch = main
 [pull]
     rebase = true
+[push]
+    autoSetupRemote = true
+[fetch]
+    prune = true
+[merge]
+    conflictStyle = diff3
+[gpg]
+    format = ssh
+[commit]
+    gpgsign = true
+[gpg "ssh"]
+    allowedSignersFile = ~/.config/git/allowed_signers
