@@ -592,6 +592,10 @@ do_update() {
     # Re-source config
     load_config
 
+    # Initialise a backup dir — install_package → backup_file needs BACKUP_DIR
+    # set before touching any deployed file. Matches cmd_config's pattern.
+    init_backup
+
     # Re-apply all configs
     local packages
     packages=$(list_packages)
