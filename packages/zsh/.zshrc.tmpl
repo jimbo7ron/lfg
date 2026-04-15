@@ -34,3 +34,22 @@ export HISTSIZE={{HISTSIZE}}
 export SAVEHIST={{HISTSIZE}}
 
 export PATH="$HOME/.local/bin:$PATH"
+
+# ── Aliases ─────────────────────────────────────────────────────────────────
+# Listed between these markers so `myaliases` can find them.
+
+# BEGIN lfg aliases
+alias prs='gh pr list'
+alias prv='gh pr view'
+alias prco='gh pr checkout'
+alias prm='gh pr merge --squash --delete-branch'
+alias prmr='gh pr merge --rebase --delete-branch'
+alias prc='gh pr create --fill'
+# END lfg aliases
+
+# Show the aliases defined between the BEGIN/END markers above.
+myaliases() {
+    sed -n '/^# BEGIN lfg aliases/,/^# END lfg aliases/p' ~/.zshrc \
+        | grep -E '^alias ' \
+        | sed 's/^alias //'
+}
