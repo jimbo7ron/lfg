@@ -38,10 +38,22 @@ fi
 
 chmod 700 "$HOME/.claude" 2>/dev/null || true
 
-# Remove any non-native npm-global install so PATH doesn't shadow the native one
+# Remove any non-native npm-global install so PATH doesn't shadow the native
+# one. If `npm uninstall` fails (e.g. stale `.claude-code-*` temp dir from a
+# previous interrupted uninstall left behind by npm's remove-by-rename), fall
+# back to rm -rf on the known npm prefix paths.
 if has_npm_global_claude; then
     echo "Removing npm-global @anthropic-ai/claude-code (non-native)"
-    npm uninstall -g @anthropic-ai/claude-code || true
+    if ! npm uninstall -g @anthropic-ai/claude-code 2>/dev/null; then
+        echo "npm uninstall failed — removing files directly"
+        npm_prefix=$(npm config get prefix 2>/dev/null || echo "/usr/local")
+        rm -rf \
+            "$npm_prefix/lib/node_modules/@anthropic-ai/claude-code" \
+            "$npm_prefix/lib/node_modules/@anthropic-ai/.claude-code-"* \
+            "$npm_prefix/bin/claude" 2>/dev/null || true
+        # Retry so npm's own metadata is also cleared
+        npm uninstall -g @anthropic-ai/claude-code 2>/dev/null || true
+    fi
 fi
 
 # Install native if not present
