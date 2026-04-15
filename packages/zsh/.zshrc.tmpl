@@ -11,8 +11,11 @@ fpath+=~/.zfunc
 # Prepend short hostname to robbyrussell prompt
 PROMPT="%{$fg[yellow]%}%m%{$reset_color%} $PROMPT"
 
-# Vi-mode line editing with [NORMAL]/[INSERT] indicator on the right
+# Vi-mode line editing with [NORMAL]/[INSERT] indicator on the right.
+# Initialise RPROMPT here so the very first prompt shows [INSERT];
+# the zle-* widgets keep it in sync on mode switches thereafter.
 bindkey -v
+RPROMPT="%{$fg[green]%}[INSERT]%{$reset_color%}"
 function zle-line-init zle-keymap-select {
   case $KEYMAP in
     vicmd)      RPROMPT="%{$fg[red]%}[NORMAL]%{$reset_color%}" ;;
