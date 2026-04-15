@@ -6,5 +6,9 @@ fzf
 jq
 git
 gh
+bat
+eza
+fd-find
+htop
 nodejs
 python3

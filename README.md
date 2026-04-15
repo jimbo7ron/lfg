@@ -225,7 +225,7 @@ Software manifests live in `software/`:
 - `apt.txt` — APT packages (Linux)
 - `common.sh` — Cross-platform installs (runs after the package manager)
 
-Default manifest includes `vim`, `tmux`, `ripgrep`, `fzf`, `jq`, `git`, `gh`, `node`/`nodejs`, `python3`. `gh` is required for the git package's install hook to auto-upload SSH keys to GitHub; without it the hook falls back to printing the key and a manual upload URL.
+Default manifest includes `vim`, `tmux`, `ripgrep` (binary: `rg`), `fzf`, `jq`, `git`, `gh`, `bat`, `eza`, `fd` (apt: `fd-find`, binary: `fdfind`), `htop`, `node`/`nodejs`, `python3`. `gh` is required for the git package's install hook to auto-upload SSH keys to GitHub; without it the hook falls back to printing the key and a manual upload URL.
 
 ## Adding a new package
 
