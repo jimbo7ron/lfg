@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # Git package install hook — set up SSH signing key and allowed_signers.
-# Idempotent: generates the keypair only if missing, appends to
-# allowed_signers only if absent, uploads to GitHub only if not already there.
-# Dry-run aware: inspects current state and reports what would change.
+#
+# First-run setup (gh upload, ssh-copy-id prompt) runs once then touches
+# ~/.ssh/.lfg-setup-done. Subsequent runs skip those steps silently.
+# To re-trigger: rm ~/.ssh/.lfg-setup-done && ./lfg config git
+#
+# Always-run steps (keygen, agent load, allowed_signers) are idempotent
+# and silent when nothing changes.
+#
+# Dry-run aware: reports what each step would do.
 set -euo pipefail
 
 key="$HOME/.ssh/id_ed25519"
 pub="$key.pub"
 allowed="$HOME/.config/git/allowed_signers"
+setup_marker="$HOME/.ssh/.lfg-setup-done"
 
-# ── Dry-run branch: inspect only, report what would happen ──────────────────
+# ── Dry-run branch: inspect only ────────────────────────────────────────────
 
 if [[ "${DRY_RUN:-false}" == "true" ]]; then
     if [[ ! -f "$key" ]]; then
@@ -25,26 +32,20 @@ if [[ "${DRY_RUN:-false}" == "true" ]]; then
         else
             echo "allowed_signers: already contains this machine's pubkey"
         fi
-
-        if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-            pub_data=$(awk '{print $2}' "$pub")
-            if gh ssh-key list 2>/dev/null | grep -q "$pub_data"; then
-                echo "GitHub: pubkey already registered"
-            else
-                echo "GitHub: would upload pubkey (auth + signing)"
-            fi
-        else
-            echo "GitHub: gh not authenticated — would print manual upload URL"
-        fi
     else
-        echo "allowed_signers / GitHub: would run after key generation"
+        echo "allowed_signers: would run after key generation"
     fi
 
-    echo "ssh-copy-id: would prompt for remote host(s) when run interactively"
+    if [[ -f "$setup_marker" ]]; then
+        echo "GitHub + ssh-copy-id: setup already complete (marker: $setup_marker)"
+    else
+        echo "GitHub: would upload pubkey (auth + signing) if gh authenticated"
+        echo "ssh-copy-id: would prompt for remote host(s) interactively"
+    fi
     exit 0
 fi
 
-# ── Real install path ───────────────────────────────────────────────────────
+# ── Always-run: keygen, agent, allowed_signers ──────────────────────────────
 
 mkdir -p "$HOME/.ssh" "$HOME/.config/git"
 chmod 700 "$HOME/.ssh"
@@ -55,14 +56,12 @@ if [[ ! -f "$key" ]]; then
     ssh-keygen -t ed25519 -C "$DOTS_GIT_EMAIL" -f "$key" -N ""
 fi
 
-# Load into agent (macOS stores passphrase in Keychain, Linux just adds).
 if [[ "$(uname)" == "Darwin" ]]; then
     ssh-add --apple-use-keychain "$key" 2>/dev/null || true
 else
     ssh-add "$key" 2>/dev/null || true
 fi
 
-# Append this machine's pubkey to allowed_signers if not already present.
 touch "$allowed"
 line="$DOTS_GIT_EMAIL $(awk '{print $1, $2}' "$pub")"
 if ! grep -qxF "$line" "$allowed"; then
@@ -70,15 +69,18 @@ if ! grep -qxF "$line" "$allowed"; then
     echo "Added pubkey to $allowed"
 fi
 
-# Upload to GitHub if gh is authed and the key isn't already registered.
+# ── First-run only: gh upload + ssh-copy-id ─────────────────────────────────
+
+if [[ -f "$setup_marker" ]]; then
+    exit 0
+fi
+
+# Upload to GitHub
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    pub_data=$(awk '{print $2}' "$pub")
-    if ! gh ssh-key list 2>/dev/null | grep -q "$pub_data"; then
-        host=$(hostname -s)
-        echo "Uploading pubkey to GitHub as auth + signing key ($host)"
-        gh ssh-key add "$pub" --title "$host" --type authentication || true
-        gh ssh-key add "$pub" --title "$host" --type signing || true
-    fi
+    host=$(hostname -s)
+    echo "Uploading pubkey to GitHub as auth + signing key ($host)"
+    gh ssh-key add "$pub" --title "$host" --type authentication 2>/dev/null || true
+    gh ssh-key add "$pub" --title "$host" --type signing 2>/dev/null || true
 else
     printf '\n────────────────────────────────────────────────────────────\n'
     printf 'gh not installed or not authenticated. Install: ./lfg install\n'
@@ -88,9 +90,7 @@ else
     printf '────────────────────────────────────────────────────────────\n\n'
 fi
 
-# Offer to copy pubkey to remote hosts via ssh-copy-id. Read directly from
-# /dev/tty so this works even when the hook's own stdin is /dev/null; skip
-# silently if there's no controlling terminal.
+# Offer to copy pubkey to remote hosts
 if { true </dev/tty; } 2>/dev/null; then
     printf '\nCopy this pubkey to a remote host via ssh-copy-id?\n'
     printf "Enter 'user@host' (blank to skip): "
@@ -105,3 +105,6 @@ if { true </dev/tty; } 2>/dev/null; then
         read -r target </dev/tty
     done
 fi
+
+# Mark setup as done
+touch "$setup_marker"
