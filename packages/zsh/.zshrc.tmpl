@@ -35,8 +35,10 @@ export SAVEHIST={{HISTSIZE}}
 
 export PATH="$HOME/.local/bin:$PATH"
 
+# Disable gh pager (e.g. gh pr list outputs directly, no less/more)
+export GH_PAGER=""
+
 # ── Aliases ─────────────────────────────────────────────────────────────────
-# Listed between these markers so `myaliases` can find them.
 
 # BEGIN lfg aliases
 alias prs='gh pr list'
@@ -45,11 +47,44 @@ alias prco='gh pr checkout'
 alias prm='gh pr merge --squash --delete-branch'
 alias prmr='gh pr merge --rebase --delete-branch'
 alias prc='gh pr create --fill'
+alias activate='source .venv/bin/activate'
 # END lfg aliases
 
-# Show the aliases defined between the BEGIN/END markers above.
 myaliases() {
+    echo "── Custom (lfg) ──"
     sed -n '/^# BEGIN lfg aliases/,/^# END lfg aliases/p' ~/.zshrc \
         | grep -E '^alias ' \
-        | sed 's/^alias //'
+        | sed 's/^alias /  /'
+    echo ""
+    echo "── Git (oh-my-zsh plugin) ──"
+    cat <<'GITEOF'
+  gst     git status
+  gss     git status --short
+  gd      git diff
+  gds     git diff --staged
+  ga      git add
+  gaa     git add --all
+  gcmsg   git commit --message
+  gl      git pull
+  gp      git push
+  gpsup   git push --set-upstream origin (current branch)
+  gco     git checkout
+  gcb     git checkout -b
+  gcm     git checkout main
+  gsw     git switch
+  gswc    git switch --create
+  gb      git branch
+  gbd     git branch --delete
+  glo     git log --oneline --decorate
+  gsta    git stash push
+  gstp    git stash pop
+  gstl    git stash list
+  grbi    git rebase --interactive
+  grbm    git rebase main
+  grt     cd to repo root
+  gcp     git cherry-pick
+  gsh     git show
+GITEOF
+    echo ""
+    echo "Full list: alias | grep '^g'"
 }
