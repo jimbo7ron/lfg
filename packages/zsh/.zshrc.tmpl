@@ -88,3 +88,63 @@ GITEOF
     echo ""
     echo "Full list: alias | grep '^g'"
 }
+
+myvim() {
+    cat <<'EOF'
+── Movement ──
+  h/j/k/l     left/down/up/right
+  w / b       next / prev word
+  e           end of word
+  0 / $       start / end of line
+  gg / G      top / bottom of file
+  { / }       prev / next paragraph
+  Ctrl-d/u    half-page down / up
+  %           jump to matching bracket
+
+── Editing ──
+  i / a       insert before / after cursor
+  I / A       insert at start / end of line
+  o / O       new line below / above
+  x           delete char
+  dd          delete line
+  D           delete to end of line
+  cc          change line
+  C           change to end of line
+  ciw         change inner word
+  ci" ci( ci{ change inside quotes/parens/braces
+  yy          yank (copy) line
+  p / P       paste after / before
+  u           undo
+  Ctrl-r      redo
+  .           repeat last command
+
+── Visual Mode ──
+  v           visual (char)
+  V           visual (line)
+  Ctrl-v      visual (block)
+  > / <       indent / outdent selection
+
+── Search ──
+  /pattern    search forward
+  ?pattern    search backward
+  n / N       next / prev match
+  *           search word under cursor
+
+── Files & Buffers ──
+  :w          save
+  :q          quit
+  :wq / ZZ    save + quit
+  :q!         quit without saving
+  :e file     open file
+  :bn / :bp   next / prev buffer
+
+── Power Moves ──
+  dd p        move a line (cut + paste)
+  xp          swap two characters
+  daw         delete a word (incl. space)
+  gUiw/guiw   uppercase/lowercase word
+  :%s/a/b/g   replace all a with b
+  :!cmd       run shell command
+  qa...q @a   record macro a, replay it
+EOF
+}
