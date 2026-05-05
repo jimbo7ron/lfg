@@ -1,7 +1,6 @@
 {
-  "alwaysThinkingEnabled": true,
-  "model": "{{CLAUDE_MODEL}}",
   "permissions": {
+    "allow": {{CLAUDE_PERMISSIONS_ALLOW}},
     "deny": [
       "Bash(rm -rf /:*)",
       "Bash(git push --force*:*)",
@@ -33,7 +32,20 @@
       "Bash(aws rds delete-db-instance:*)",
       "Bash(aws rds delete-db-cluster:*)",
       "Bash(aws dynamodb delete-table:*)"
-    ],
-    "allow": {{CLAUDE_PERMISSIONS_ALLOW}}
-  }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash {{HOME}}/.claude/statusline-command.sh"
+  },
+  "enabledPlugins": {
+    "swift-lsp@claude-plugins-official": true
+  },
+  "alwaysThinkingEnabled": true,
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
+  "agentPushNotifEnabled": true,
+  "voiceEnabled": true
 }

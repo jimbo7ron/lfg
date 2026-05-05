@@ -486,13 +486,24 @@ install_software() {
         return 0
     fi
 
-    # Filter already-installed packages
+    # Ask the package manager directly — authoritative when binary name
+    # differs from package name (ripgrep→rg, awscli→aws, fd-find→fdfind)
+    # or when there's no binary at all (nvm). Fall back to PATH lookup if
+    # the package manager isn't available.
+    local installed_list=""
+    if [[ "$DOTFILES_OS" == "macos" ]] && command -v brew &>/dev/null; then
+        installed_list=$'\n'$(brew list --formula -1 2>/dev/null)$'\n'$(brew list --cask -1 2>/dev/null)$'\n'
+    elif [[ "$DOTFILES_OS" != "macos" ]] && command -v dpkg-query &>/dev/null; then
+        installed_list=$'\n'$(dpkg-query -W -f='${Package}\n' 2>/dev/null)$'\n'
+    fi
+
     local missing=()
     for pkg in "${to_install[@]}"; do
-        if ! command -v "$pkg" &>/dev/null; then
-            missing+=("$pkg")
-        else
+        if [[ -n "$installed_list" && "$installed_list" == *$'\n'"$pkg"$'\n'* ]] || \
+           command -v "$pkg" &>/dev/null; then
             [[ "$DRY_RUN" == "true" ]] && printf "${GREEN}✓ Already installed: %s${RESET}\n" "$pkg"
+        else
+            missing+=("$pkg")
         fi
     done
 

@@ -11,4 +11,12 @@ eza
 fd
 htop
 node
+nvm
 python3
+python@3.11
+aws-console
+awscli
+playwright-mcp
+watch
+xcodegen
+xcodes
