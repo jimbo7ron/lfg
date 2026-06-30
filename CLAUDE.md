@@ -37,4 +37,4 @@ Tests must pass before committing. CI runs on GitHub Actions (Ubuntu).
 - `lib/helpers.sh` -- all helper functions (template processing, file ops, backup, etc.)
 - `defaults.conf` -- default `DOTS_*` variable values
 - `packages/<name>/` -- dotfile packages, files mirror `$HOME` structure
-- `test/run_tests.sh` -- test suite (53 assertions)
+- `test/run_tests.sh` -- test suite (63 assertions)

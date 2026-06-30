@@ -397,6 +397,41 @@ else
     fail "install --dry-run lists packages"
 fi
 
+# ── Test 18: SSH command ─────────────────────────────────────────────────────
+
+section "SSH"
+
+# Help advertises the command and its subcommands
+assert_output_contains "ssh" "$LFG" --help
+
+# status with no key: warns and exits non-zero
+rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub"
+assert_output_contains "No key" "$LFG" ssh status
+assert_exit_code 1 "$LFG" ssh status
+
+# copy with no host argument: usage error, exit 1
+assert_output_contains "Usage" "$LFG" ssh copy
+assert_exit_code 1 "$LFG" ssh copy
+
+# copy --dry-run does not generate a key or contact any host
+output=$("$LFG" ssh copy me@example.com --dry-run 2>&1)
+if echo "$output" | grep -q "Dry-run"; then
+    pass "ssh copy --dry-run reports without acting"
+else
+    fail "ssh copy --dry-run reports without acting"
+fi
+assert_file_not_exists "$HOME/.ssh/id_ed25519" "ssh copy --dry-run does not generate a key"
+
+# unknown subcommand: error, exit 1
+assert_exit_code 1 "$LFG" ssh frobnicate
+
+# status with a key present: reports it and exits 0
+mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+ssh-keygen -t ed25519 -C "test@example.com" -f "$HOME/.ssh/id_ed25519" -N "" -q
+assert_output_contains "Key present" "$LFG" ssh status
+assert_exit_code 0 "$LFG" ssh status
+rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub"
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════

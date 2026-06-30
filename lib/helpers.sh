@@ -679,3 +679,196 @@ add_package() {
     log_blue "Files will be deployed relative to \$HOME"
     log_blue "Use .tmpl extension for files that need {{VAR}} substitution"
 }
+
+# ── SSH Key Management ───────────────────────────────────────────────────────
+#
+# Shared between the `ssh` command and the git package's install hook so there
+# is one source of truth for the keypair, its agent registration, and the
+# allowed_signers entry. Keys are never stored in the repo — these helpers
+# operate purely on $HOME.
+
+SSH_KEY="$HOME/.ssh/id_ed25519"
+SSH_PUB="$SSH_KEY.pub"
+SSH_ALLOWED_SIGNERS="$HOME/.config/git/allowed_signers"
+
+# Print a $HOME-relative path with a leading ~ for tidy output.
+tilde_path() {
+    local p="$1"
+    if [[ "$p" == "$HOME"/* || "$p" == "$HOME" ]]; then
+        printf '~%s' "${p#"$HOME"}"
+    else
+        printf '%s' "$p"
+    fi
+}
+
+# Generate the ed25519 keypair if missing, load it into the agent, and ensure
+# the pubkey is registered in allowed_signers. Idempotent and silent when
+# nothing changes. Uses DOTS_GIT_EMAIL for the key comment / signer identity,
+# falling back to user@host when it isn't set.
+ssh_ensure_key() {
+    local email="${DOTS_GIT_EMAIL:-${USER:-user}@$(hostname -s 2>/dev/null || hostname)}"
+
+    mkdir -p "$HOME/.ssh" "$(dirname "$SSH_ALLOWED_SIGNERS")"
+    chmod 700 "$HOME/.ssh"
+
+    if [[ ! -f "$SSH_KEY" ]]; then
+        printf '\nNo SSH key at %s — generating ed25519 keypair (no passphrase).\n' "$SSH_KEY"
+        printf 'To add a passphrase later: ssh-keygen -p -f %s\n\n' "$SSH_KEY"
+        ssh-keygen -t ed25519 -C "$email" -f "$SSH_KEY" -N ""
+    fi
+    chmod 600 "$SSH_KEY" 2>/dev/null || true
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        ssh-add --apple-use-keychain "$SSH_KEY" 2>/dev/null || true
+    else
+        ssh-add "$SSH_KEY" 2>/dev/null || true
+    fi
+
+    touch "$SSH_ALLOWED_SIGNERS"
+    local line="$email $(awk '{print $1, $2}' "$SSH_PUB")"
+    if ! grep -qxF "$line" "$SSH_ALLOWED_SIGNERS"; then
+        echo "$line" >> "$SSH_ALLOWED_SIGNERS"
+        log_info "Added pubkey to $(tilde_path "$SSH_ALLOWED_SIGNERS")"
+    fi
+}
+
+# Read-only health check: does this machine have a usable, registered SSH key?
+# Never mutates state. Returns non-zero if the key itself is missing.
+ssh_status() {
+    log_header "SSH key status"
+
+    if [[ ! -f "$SSH_KEY" ]]; then
+        log_warn "No key at $(tilde_path "$SSH_KEY")"
+        log_blue "Generate one with: ./lfg config git   (or ./lfg ssh copy <host>)"
+        return 1
+    fi
+
+    log_info "Key present: $(tilde_path "$SSH_KEY")"
+    local fp
+    fp=$(ssh-keygen -lf "$SSH_KEY" 2>/dev/null) && printf '    %s\n' "$fp"
+
+    # Permissions (best effort; BSD then GNU stat)
+    local mode
+    mode=$(stat -f '%Lp' "$SSH_KEY" 2>/dev/null || stat -c '%a' "$SSH_KEY" 2>/dev/null || echo "")
+    if [[ -n "$mode" && "$mode" != "600" ]]; then
+        log_warn "Key mode is $mode, expected 600 — run: chmod 600 $(tilde_path "$SSH_KEY")"
+    fi
+
+    # Loaded in the agent? Compare fingerprints.
+    if [[ -f "$SSH_PUB" ]]; then
+        local keyfp
+        keyfp=$(ssh-keygen -lf "$SSH_PUB" 2>/dev/null | awk '{print $2}')
+        if [[ -n "$keyfp" ]] && ssh-add -l 2>/dev/null | awk '{print $2}' | grep -qxF "$keyfp"; then
+            log_info "Loaded in ssh-agent"
+        else
+            log_warn "Not loaded in ssh-agent — run: ssh-add $(tilde_path "$SSH_KEY")"
+        fi
+    fi
+
+    # Registered in allowed_signers (local signature verification)?
+    if [[ -f "$SSH_PUB" ]]; then
+        local pubkey
+        pubkey=$(awk '{print $1, $2}' "$SSH_PUB")
+        if [[ -f "$SSH_ALLOWED_SIGNERS" ]] && grep -qF "$pubkey" "$SSH_ALLOWED_SIGNERS"; then
+            log_info "Registered in allowed_signers"
+        else
+            log_warn "Not in allowed_signers ($(tilde_path "$SSH_ALLOWED_SIGNERS"))"
+        fi
+    fi
+
+    # Registered on GitHub (auth + signing)?
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        local body matched
+        body=$(awk '{print $2}' "$SSH_PUB")
+        matched=$(gh ssh-key list 2>/dev/null | grep -F "$body" || true)
+        if [[ -n "$matched" ]]; then
+            echo "$matched" | grep -qi authentication \
+                && log_info "GitHub: registered as authentication key" \
+                || log_warn "GitHub: not registered as authentication key"
+            echo "$matched" | grep -qi signing \
+                && log_info "GitHub: registered as signing key" \
+                || log_warn "GitHub: not registered as signing key"
+        else
+            log_warn "GitHub: this key is not registered — run: gh ssh-key add $(tilde_path "$SSH_PUB")"
+        fi
+    else
+        log_blue "GitHub: skipped (gh not installed or not authenticated)"
+    fi
+
+    return 0
+}
+
+# Copy the local pubkey to a remote host with the standard ssh-copy-id, then
+# verify key-based login works. ssh/ssh-copy-id read any password prompt from
+# the controlling terminal directly, so this works under the hook's piped stdin.
+ssh_copy_one() {
+    local target="$1"
+    log_header "Copying pubkey to $target"
+    if ssh-copy-id "$target"; then
+        log_info "Copied pubkey to $target"
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" true 2>/dev/null; then
+            log_info "Key-based login to $target works"
+        else
+            log_warn "Copied, but key-based login test to $target did not succeed yet"
+        fi
+        return 0
+    fi
+    log_error "Failed to copy to $target"
+    return 1
+}
+
+# `ssh copy` entry point: ensure a key exists, then copy it to one or more hosts.
+ssh_copy() {
+    if [[ $# -eq 0 ]]; then
+        log_error "Usage: ./lfg ssh copy <user@host> [user@host...]"
+        return 1
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        [[ -f "$SSH_KEY" ]] || log_blue "Dry-run: would generate $(tilde_path "$SSH_KEY")"
+        local t
+        for t in "$@"; do
+            log_blue "Dry-run: would run ssh-copy-id $t"
+        done
+        return 0
+    fi
+
+    ssh_ensure_key
+
+    local rc=0 target
+    for target in "$@"; do
+        ssh_copy_one "$target" || rc=1
+    done
+    return $rc
+}
+
+# `ssh test` entry point: confirm key-based auth works against GitHub and any
+# extra hosts. GitHub's SSH endpoint exits non-zero even on success, so we match
+# its greeting text rather than the exit code.
+ssh_test() {
+    log_header "SSH connectivity test"
+    local rc=0
+
+    log_blue "Testing GitHub (git@github.com)..."
+    local out
+    out=$(ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com 2>&1) || true
+    if echo "$out" | grep -qi "successfully authenticated"; then
+        log_info "GitHub: $(echo "$out" | head -1)"
+    else
+        log_warn "GitHub: $(echo "$out" | head -1)"
+        rc=1
+    fi
+
+    local host
+    for host in "$@"; do
+        log_blue "Testing $host..."
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" true 2>/dev/null; then
+            log_info "$host: key-based login works"
+        else
+            log_warn "$host: key-based login failed (unreachable, or key not installed there)"
+            rc=1
+        fi
+    done
+
+    return $rc
+}
