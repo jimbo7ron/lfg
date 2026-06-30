@@ -63,7 +63,7 @@ On a fresh machine:
 - Existing dotfiles get backed up under `backups/<timestamp>/`
 - 8 packages deploy: `bash`, `claude`, `git`, `hostname`, `ssh`, `tmux`, `vim`, `zsh`
 - The `git` hook generates `~/.ssh/id_ed25519` if missing, loads it into ssh-agent (Keychain-backed on macOS), appends the pubkey to `~/.config/git/allowed_signers`, and uploads to GitHub as auth + signing key
-- The `git` hook then offers an interactive `ssh-copy-id` prompt — enter `user@host` to push the key to a remote, or blank to skip
+- The `git` hook then offers an interactive `ssh-copy-id` prompt — enter `user@host` to push the key to a remote, or blank to skip (you can do this any time later with `./lfg ssh copy user@host`)
 - The `claude` hook installs Claude Code natively via the official installer (`curl -fsSL https://claude.ai/install.sh | bash`) if `claude` isn't already on `PATH`
 - The `vim` hook downloads the dracula colorscheme into `~/.vim/{colors,autoload}/`
 - The `hostname` hook applies `DOTS_HOSTNAME` if set (prompts for sudo)
@@ -91,6 +91,7 @@ Subsequent `./lfg config` runs are idempotent — no re-keygen, no duplicate `al
 | `restore <timestamp>` | Restore configs from a backup |
 | `add <name>` | Scaffold a new dotfile package |
 | `list` | Show available packages and status |
+| `ssh <subcommand>` | Manage your SSH key (`status`, `copy`, `test`) |
 
 ### Options
 
@@ -125,6 +126,22 @@ Before running `./lfg config`, see what live edits would be overwritten:
 ./lfg save zsh --push       # save local zsh changes, commit, push
 ./lfg install ripgrep fzf   # install specific packages
 ```
+
+### Managing your SSH key
+
+The `git` install hook sets up your SSH key on first run (see [Install hooks](#install-hooks)). The `ssh` command lets you check on and reuse that key at any time afterward — keys live only in `$HOME`, never in the repo.
+
+```bash
+./lfg ssh status            # confirm the key exists, is loaded, and is registered
+./lfg ssh copy me@host      # copy your pubkey to a remote host (repeatable)
+./lfg ssh copy a@h1 b@h2    # copy to several hosts at once
+./lfg ssh test              # test key-based auth against GitHub
+./lfg ssh test me@host      # also test a specific host
+```
+
+- **`status`** reports whether `~/.ssh/id_ed25519` exists (with fingerprint and permissions), whether it's loaded in `ssh-agent`, whether it's in `~/.config/git/allowed_signers`, and — if `gh` is authenticated — whether GitHub has it registered as an authentication and signing key.
+- **`copy`** generates the key first if it's missing, then runs the standard `ssh-copy-id` for each host and verifies key-based login worked. This is the same logic the first-run hook offers, available on demand for new hosts. `--dry-run` shows what it would do without touching anything.
+- **`test`** confirms key-based auth actually works (GitHub plus any hosts you name).
 
 ## How it works
 
@@ -164,7 +181,7 @@ packages/
 
 | Package | What the hook does |
 |---------|-------------------|
-| `git` | Generates `~/.ssh/id_ed25519` if missing, loads into ssh-agent (Keychain-backed on macOS), appends pubkey to `~/.config/git/allowed_signers`, uploads to GitHub as auth + signing key via `gh` if authenticated, and optionally runs `ssh-copy-id` to remote hosts you enter interactively |
+| `git` | Generates `~/.ssh/id_ed25519` if missing, loads into ssh-agent (Keychain-backed on macOS), appends pubkey to `~/.config/git/allowed_signers`, uploads to GitHub as auth + signing key via `gh` if authenticated, and optionally runs `ssh-copy-id` to remote hosts you enter interactively. The keygen/agent/`allowed_signers` logic is shared with the [`ssh` command](#managing-your-ssh-key) (`ssh_ensure_key` in `lib/helpers.sh`), so both stay in sync |
 | `claude` | Sets `~/.claude` to `chmod 700`; installs Claude Code natively via `curl -fsSL https://claude.ai/install.sh \| bash` if `claude` isn't already on `PATH` |
 | `vim` | Downloads the dracula colorscheme (referenced by `.vimrc`) into `~/.vim/colors/` and `~/.vim/autoload/` if missing |
 | `hostname` | If `DOTS_HOSTNAME` is set and differs from the current hostname, applies it via `scutil` (macOS) or `hostnamectl` (Linux). Requires sudo and a tty. No-op otherwise |

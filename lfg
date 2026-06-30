@@ -39,6 +39,12 @@ ${BOLD}Commands:${RESET}
   ${GREEN}restore${RESET} <timestamp> Restore configs from backup
   ${GREEN}add${RESET} <name>          Scaffold a new dotfile config package
   ${GREEN}list${RESET}                Show available packages and status
+  ${GREEN}ssh${RESET} <subcommand>    Manage your SSH key (status | copy | test)
+
+${BOLD}SSH subcommands:${RESET}
+  ${GREEN}ssh status${RESET}          Confirm the key exists, is loaded, and is registered
+  ${GREEN}ssh copy${RESET} <host>...  Copy your pubkey to remote host(s) via ssh-copy-id
+  ${GREEN}ssh test${RESET} [host]...  Test key-based auth against GitHub and any hosts
 
 ${BOLD}Options:${RESET}
   --dry-run           Show what would change without applying
@@ -62,6 +68,9 @@ ${BOLD}Examples:${RESET}
   ./lfg verify --diff         Full unified diff for drifted files
   ./lfg update                Pull remote changes, re-apply
   ./lfg list                  Show packages and status
+  ./lfg ssh status            Confirm your SSH key is set up
+  ./lfg ssh copy me@host      Copy your pubkey to a remote host
+  ./lfg ssh test              Test key-based auth against GitHub
 EOF
 }
 
@@ -220,6 +229,24 @@ cmd_list() {
     done
 }
 
+cmd_ssh() {
+    local sub="${1:-status}"
+    [[ $# -gt 0 ]] && shift
+
+    load_config
+
+    case "$sub" in
+        status) ssh_status ;;
+        copy)   ssh_copy ${@+"$@"} ;;
+        test)   ssh_test ${@+"$@"} ;;
+        *)
+            log_error "Unknown ssh subcommand: $sub"
+            echo "Usage: ./lfg ssh <status|copy|test>"
+            return 1
+            ;;
+    esac
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 main() {
@@ -236,7 +263,7 @@ main() {
             --losses)   VERIFY_LOSSES="true"; shift ;;
             -h|--help)  usage; exit 0 ;;
             -v|--version) echo "lfg $LFG_VERSION"; exit 0 ;;
-            config|install|save|verify|update|restore|add|list)
+            config|install|save|verify|update|restore|add|list|ssh)
                 if [[ -z "$command" ]]; then
                     command="$1"
                 else
@@ -259,10 +286,13 @@ main() {
     # Detect OS once for all commands
     detect_os
 
-    # Validate package name arguments
-    for arg in ${args[@]+"${args[@]}"}; do
-        validate_name "$arg" "package" || exit 1
-    done
+    # Validate package name arguments (ssh args are subcommands / hostnames,
+    # not package names, so skip the package-name check for that command)
+    if [[ "$command" != "ssh" ]]; then
+        for arg in ${args[@]+"${args[@]}"}; do
+            validate_name "$arg" "package" || exit 1
+        done
+    fi
 
     case "$command" in
         config)  cmd_config ${args[@]+"${args[@]}"} ;;
@@ -273,6 +303,7 @@ main() {
         restore) cmd_restore "${args[0]:-}" ;;
         add)     cmd_add "${args[0]:-}" ;;
         list)    cmd_list ;;
+        ssh)     cmd_ssh ${args[@]+"${args[@]}"} ;;
         *)       log_error "Unknown command: $command"; usage; exit 1 ;;
     esac
 }
