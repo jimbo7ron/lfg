@@ -804,7 +804,11 @@ ssh_status() {
 ssh_copy_one() {
     local target="$1"
     log_header "Copying pubkey to $target"
-    if ssh-copy-id "$target"; then
+    # ssh-copy-id treats a non-empty $DRY_RUN env var as its own -n (dry-run)
+    # flag and never initialises it otherwise. lfg exports DRY_RUN ("false"),
+    # which is non-empty — so it must be stripped from ssh-copy-id's
+    # environment or it silently refuses to install the key.
+    if env -u DRY_RUN ssh-copy-id "$target"; then
         log_info "Copied pubkey to $target"
         if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" true 2>/dev/null; then
             log_info "Key-based login to $target works"
